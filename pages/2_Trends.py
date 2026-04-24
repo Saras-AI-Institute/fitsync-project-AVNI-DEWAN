@@ -1,111 +1,103 @@
 import streamlit as st
+from modules.processor import process_data
 import pandas as pd
-import numpy as np
 import plotly.express as px
+from utils.theme import apply_theme, apply_plotly_theme
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", page_title="FitSync · Trends & Insights")
 
+# Apply theme (CSS + toggle button)
+apply_theme()
+
+# ── Page Content ──────────────────────────────────────────────────────────────
+
+st.markdown("<br>", unsafe_allow_html=True)
 st.title("Trends & Insights")
 
-# ✅ Sidebar
+st.markdown(
+    "<p style='font-size:1rem; margin-top:-8px; margin-bottom:24px; opacity:0.7;'>"
+    "Explore distributions and monthly patterns in your health data."
+    "</p>",
+    unsafe_allow_html=True,
+)
+
+st.markdown("<hr>", unsafe_allow_html=True)
+
+# ── Load Data ─────────────────────────────────────────────────────────────────
+df = process_data()
+df.columns = df.columns.str.lower()
+df['date'] = pd.to_datetime(df['date'])
+
+# ── Sidebar Filters ───────────────────────────────────────────────────────────
 st.sidebar.header("Filters")
 time_range = st.sidebar.selectbox(
     "Select Time Range",
-    ["Last 7 Days", "Last 30 Days", "All Time"]
+    options=["Last 7 Days", "Last 30 Days", "All Time"],
+    index=2,
 )
 
-# ✅ Data
-data = pd.DataFrame({
-    "Date": pd.date_range(end=pd.Timestamp.today(), periods=90),
-    "Recovery Score": np.random.randint(40, 80, 90),
-    "Sleep Hours": np.random.uniform(6, 8, 90).round(1),
-    "Steps": np.random.randint(6000, 15000, 90)
-})
-
-# ✅ Filter
-today = pd.Timestamp.today()
-
 if time_range == "Last 7 Days":
-    filtered_df = data[data["Date"] >= today - pd.Timedelta(days=7)].copy()
+    date_threshold = df['date'].max() - pd.Timedelta(days=7)
+    filtered_df = df[df['date'] > date_threshold]
 elif time_range == "Last 30 Days":
-    filtered_df = data[data["Date"] >= today - pd.Timedelta(days=30)].copy()
+    date_threshold = df['date'].max() - pd.Timedelta(days=30)
+    filtered_df = df[df['date'] > date_threshold]
 else:
-    filtered_df = data.copy()
+    filtered_df = df
 
-# ✅ Sort (important for line charts)
-filtered_df = filtered_df.sort_values("Date")
-
-# =========================
-# 📊 Summary
-# =========================
+# ── Summary Statistics ────────────────────────────────────────────────────────
 st.subheader("Summary Statistics")
-summary_stats = filtered_df[["Recovery Score", "Sleep Hours", "Steps"]].describe()
-st.dataframe(summary_stats)
+st.dataframe(
+    filtered_df[['recovery_score', 'sleep_hours', 'steps', 'calories_burned']].describe(),
+    use_container_width=True,
+)
 
-# =========================
-# 📊 Distribution Section
-# =========================
-st.subheader("Distribution of Health Metrics")
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ── Monthly Average Recovery ──────────────────────────────────────────────────
+filtered_df['Month'] = filtered_df['date'].dt.to_period('M')
+monthly_avg_recovery = filtered_df.groupby('Month')['recovery_score'].mean().reset_index()
+monthly_avg_recovery['Month'] = monthly_avg_recovery['Month'].astype(str)
+
+st.subheader("Average Recovery Score per Month")
+line_chart_avg_recovery = px.line(
+    monthly_avg_recovery,
+    x='Month',
+    y='recovery_score',
+    title="Monthly Average Recovery Score",
+    markers=True,
+)
+st.plotly_chart(apply_plotly_theme(line_chart_avg_recovery), use_container_width=True)
+
+st.markdown("<hr>", unsafe_allow_html=True)
+
+# ── Histograms ────────────────────────────────────────────────────────────────
+st.subheader("Distributions")
 
 col1, col2 = st.columns(2)
 
-# 📊 Steps Distribution
 with col1:
-    fig_steps = px.histogram(
-        filtered_df,
-        x="Steps",
-        nbins=15,
-        title="Distribution of Steps"
+    st.plotly_chart(
+        apply_plotly_theme(px.histogram(filtered_df, x='steps', title="Distribution of Steps")),
+        use_container_width=True,
     )
-    st.plotly_chart(fig_steps, use_container_width=True)
-
-# 📊 Calories (simulated)
-filtered_df["Calories Burned"] = (filtered_df["Steps"] * 0.04).astype(int)
 
 with col2:
-    fig_cal = px.histogram(
-        filtered_df,
-        x="Calories Burned",
-        nbins=15,
-        title="Distribution of Calories Burned"
+    st.plotly_chart(
+        apply_plotly_theme(px.histogram(filtered_df, x='calories_burned', title="Distribution of Calories Burned")),
+        use_container_width=True,
     )
-    st.plotly_chart(fig_cal, use_container_width=True)
 
-# =========================
-# 📈 Sleep Hours Trend
-# =========================
-st.subheader("Sleep Hours Trend")
+col3, col4 = st.columns(2)
 
-fig_sleep = px.line(
-    filtered_df,
-    x="Date",
-    y="Sleep Hours",
-    title="Sleep Hours Over Time",
-    markers=True
-)
+with col3:
+    st.plotly_chart(
+        apply_plotly_theme(px.histogram(filtered_df, x='recovery_score', title="Distribution of Recovery Score")),
+        use_container_width=True,
+    )
 
-st.plotly_chart(fig_sleep, use_container_width=True)
-
-# =========================
-# 📊 Monthly Recovery Score
-# =========================
-st.subheader("Average Recovery Score by Month")
-
-# ✅ Fix for JSON serialization error
-filtered_df["Month"] = filtered_df["Date"].dt.to_period("M").astype(str)
-
-monthly_avg = (
-    filtered_df.groupby("Month")["Recovery Score"]
-    .mean()
-    .reset_index()
-)
-
-fig_month = px.bar(
-    monthly_avg,
-    x="Month",
-    y="Recovery Score",
-    title="Average Recovery Score per Month",
-    text_auto=True
-)
-
-st.plotly_chart(fig_month, use_container_width=True)
+with col4:
+    st.plotly_chart(
+        apply_plotly_theme(px.histogram(filtered_df, x='sleep_hours', title="Distribution of Sleep Hours")),
+        use_container_width=True,
+    )
