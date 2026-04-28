@@ -1,5 +1,6 @@
-pandas==2.1.1
-numpy==1.26.0
-pytest==7.4.2
-streamlit==1.27.0
-plotly==5.17.0
+streamlit==1.32.0
+pandas==2.2.2
+plotly
+numpy
+statsmodels
+pillow>=10.0.0
